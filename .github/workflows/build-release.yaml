@@ -1,11 +1,14 @@
 name: Build & Release
 on:
-  push:
-    branches:
-      - "*"
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+# on:
+#   push:
+#     branches:
+#       - "*"
+#   pull_request:
+#     branches:
+#       - main
+
 permissions:
   contents: write
   pull-requests: write
