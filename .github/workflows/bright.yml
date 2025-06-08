@@ -1,0 +1,70 @@
+name: Bright
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+permissions:
+  checks: write
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Install application dependencies
+        run: |
+          npm install
+
+      - name: Install SecTester dependencies
+        run: |
+          npm i --save=false --prefix .brightsec @sectester/core @sectester/repeater @sectester/scan @sectester/runner @sectester/reporter
+
+      - name: Start Wallos application
+        run: |
+          docker run -d --name wallos \
+            -v /path/to/config/wallos/db:/var/www/html/db \
+            -v /path/to/config/wallos/logos:/var/www/html/images/uploads/logos \
+            -e TZ=Europe/Berlin \
+            -p 8282:80 \
+            --restart unless-stopped \
+            bellamy/wallos:latest
+
+      - name: Wait for Wallos to be ready
+        run: |
+          for i in {1..30}; do
+            nc -zv 127.0.0.1 8282 && echo "Wallos is ready" && exit 0
+            echo "Waiting for Wallos..."
+            sleep 10
+          done
+          echo "Wallos did not become ready in time" && exit 1
+
+      - name: Configure Bright credentials
+        uses: ./.github/workflows/composite/configure-bright-credentials
+        with:
+          BRIGHT_HOSTNAME: development.playground.brightsec.com
+          BRIGHT_PROJECT_ID: dzZUZGaqqVhvHnZnjfXUoP
+          BRIGHT_TOKEN: ${{ secrets.BRIGHT_TOKEN }}
+
+      - name: Run security tests
+        env:
+          BRIGHT_HOSTNAME: development.playground.brightsec.com
+          BRIGHT_PROJECT_ID: dzZUZGaqqVhvHnZnjfXUoP
+          BRIGHT_AUTH_ID: ${{ vars.BRIGHT_AUTH_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRIGHT_TOKEN: ${{ env.BRIGHT_TOKEN }}
+          BRIGHT_TARGET_URL: http://127.0.0.1:8282
+        run: |
+          node --experimental-transform-types --experimental-strip-types --experimental-detect-module \
+            --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning \
+            --test-force-exit --test-concurrency=4 --test .brightsec/tests/*.test.ts
